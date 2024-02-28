@@ -1,9 +1,9 @@
 import express from "express";
 import cors from "cors";
-// import connectToMongoDB from "./db/index";
+import mongo from "./db/index";
 import router from "./routes/userRoutes";
 import cookieParser from "cookie-parser";
-import mongo from "./utils/mongo";
+// import mongo from "./utils/mongo";
 
 const app = express();
 

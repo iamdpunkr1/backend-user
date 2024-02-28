@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import connectToMongoDB from "../db/index";
+import mongo from "../db/index";
 import asyncHandler from "../utils/asyncHandler";
 import jwt from "jsonwebtoken"
 import bcrypt from "bcrypt"
@@ -7,7 +7,7 @@ import { ObjectId } from "mongodb";
 import nodemailer from "nodemailer";
 import { saveBase64Image } from "../utils/saveImage";
 import { ApiError } from "../utils/ApiError";
-import mongo from "../utils/mongo";
+// import mongo from "../utils/mongo";
 
 // console.log("User Controller", mongo);
 // const {Users} = mongo;
@@ -19,8 +19,8 @@ enum Hobbies {
   travelling = "travelling",
 }
 
-const resetLinkExpiryTime:number = 3600000; // 1 hour in milliseconds
-const passwordResetInterval:number = 86400000; // 24 hours in milliseconds
+const resetLinkExpiryTime:number =  86400000; // 24 hours in milliseconds
+const passwordResetInterval:number = 3600000; // 1 hour in milliseconds
 
 const generateAccessToken = function(){
   return jwt.sign(
@@ -72,6 +72,8 @@ const register = asyncHandler( async (req: Request, res: Response) => {
         if ([username, email, password, address, phone, gender].some(field => field.trim() === "")) {
             throw new ApiError(400, "All fields are required");
         }
+
+        if(!(username.length > 4 && username.length<25) ) throw new ApiError(400,"Username must be between 4-25 characters")
         
         // Validate UserName
         const USER_REGEX = /^[A-z][A-z0-9-_]{3,23}$/;
@@ -205,14 +207,15 @@ const logoutUser = asyncHandler(async(req, res) => {
 
 
 const uploadImages =  asyncHandler(async (req:Request, res:Response)=>{
-    // const image = req.body.image;
-    const {image, actualImage} = req.body;
-    // const {filename} = req.file;
+    const image = req.body.image;
+    // const {image, actualImage} = req.body;
+    const {filename} = req.file;
 
     const {_id} = req.user;
+    console.log("uploading image")
 
-    if(!image || !actualImage) throw new ApiError(400,"Invalid Image");
-
+    if(!image) throw new ApiError(400,"Invalid Image");
+    if(!filename) throw new ApiError(500,"Server Error, Failed to save image");
     const { Users } = mongo;
 
     const filter = { _id: new ObjectId(_id) };
@@ -226,13 +229,14 @@ const uploadImages =  asyncHandler(async (req:Request, res:Response)=>{
 
     
     try{   
-        const filename = await saveBase64Image(actualImage);
+        // const filename = await saveBase64Image(actualImage);
 
         const update:any = { $push: { images: {thumbnail:image,
             cdUrl: filename } } };
         await Users.findOneAndUpdate(filter, update);
         
         const updatedUser2 = await Users.findOne(filter);
+        console.log("uploaded")
         res.status(201).json({ message: "Upload Successful", newImages: updatedUser2.images });
     } catch (error) {
         throw new ApiError(500,"Failed to save image")
@@ -270,7 +274,7 @@ const forgotPassword = asyncHandler(async (req: Request, res: Response) => {
     // Check if the user has recently generated a reset link
     if (user.resetLinkGeneratedAt && Date.now() - user.resetLinkGeneratedAt < resetLinkExpiryTime) {
         const remainingTime = resetLinkExpiryTime - (Date.now() - user.resetLinkGeneratedAt);
-        return res.status(429).json({ message: `Reset link can only be generated once per hour. Please try again in ${Math.ceil(remainingTime / 60000)} minutes.` });
+        return res.status(429).json({ message: `Reset link can only be generated once in 24hrs. Please try again after 24hrs.` });
     }
 
     // Generate JWT token (use Base64 encoding or JWTs)
@@ -349,7 +353,7 @@ const resetPassword = asyncHandler(async (req: Request, res: Response) => {
 
     if (user && user.lastPasswordReset && Date.now() - user.lastPasswordReset < passwordResetInterval) {
         const remainingTime = passwordResetInterval - (Date.now() - user.lastPasswordReset);
-        return res.status(429).json({ message: `You can only reset your password once in 24 hours. Please try again in ${Math.ceil(remainingTime / 3600000)} hours.` });
+        return res.status(429).json({ message: `You can only reset your password once in 1 hour. Please try again after ${Math.ceil(remainingTime / 3600000)} hour.` });
     }
 
     // Hash and update password
@@ -363,7 +367,7 @@ const resetPassword = asyncHandler(async (req: Request, res: Response) => {
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
     const incomingRefreshToken = req.cookies.refreshToken || req.body.refreshToken
-
+    console.log("refresh token", incomingRefreshToken)
     if (!incomingRefreshToken) {
         throw new ApiError(401,"Unauthorized request")
     }
@@ -387,10 +391,6 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
             
         }
     
-        // const options = {
-        //     httpOnly: true, 
-        //     secure: true
-        // }
     
         const accessToken = await generateAccessToken.call(user);
         const { password: _,_id:id, refreshToken:rfsh, ...userWithoutPassword } = user;
@@ -399,7 +399,7 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
         .json({...userWithoutPassword,  accessToken});
 
     } catch (error) {
-        throw new ApiError(401, error?.message || "Invalid refresh token")
+        throw new ApiError(401,  "Invalid refresh token")
     }
 
 })

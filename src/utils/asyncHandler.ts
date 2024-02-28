@@ -1,14 +1,15 @@
 import { Request, Response, NextFunction } from "express";
 
-type functionProps = (req:Request, res:Response,) => Promise<any>
+type functionProps = (req:Request, res:Response, next:NextFunction) => Promise<any>
 
 const asyncHandler = (fn: functionProps) => async (req:Request, res:Response,  next:NextFunction) => {
     try{
-       await fn(req, res);
+       await fn(req, res, next);
     }catch(error){
-        res.status(error.code || 500).json({
+
+        res.status(error.statusCode || 500).json({
             success:false,
-            message:error.message === "jwt expired" ? "Session Expired, Please login again" : error.message
+            message: error.message || "Something went wrong"
         })
     }
 }
